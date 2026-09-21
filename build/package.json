@@ -1,0 +1,15 @@
+{
+  "name": "furnishings-board-build",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test.mjs"
+  },
+  "dependencies": {
+    "lz-string": "^1.5.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.11.0"
+  }
+}

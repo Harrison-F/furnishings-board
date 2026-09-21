@@ -1,0 +1,334 @@
+<title>Furnishings Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#DCDAD3; --surface:#F8F7F4; --surface-2:#EEEDE8;
+    --ink:#191815; --muted:#6B675E; --line:rgba(25,24,21,.14);
+    --brass:#8A6524; --dot:rgba(25,24,21,.11); --shadow:0 1px 2px rgba(25,24,21,.10),0 8px 24px rgba(25,24,21,.10);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#171614; --surface:#242320; --surface-2:#2E2C28;
+      --ink:#ECEAE4; --muted:#9A958A; --line:rgba(236,234,228,.15);
+      --brass:#C9A05A; --dot:rgba(236,234,228,.09); --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#171614; --surface:#242320; --surface-2:#2E2C28;
+    --ink:#ECEAE4; --muted:#9A958A; --line:rgba(236,234,228,.15);
+    --brass:#C9A05A; --dot:rgba(236,234,228,.09); --shadow:0 1px 2px rgba(0,0,0,.5),0 10px 28px rgba(0,0,0,.45);
+  }
+  html,body{height:100%}
+  body{background:var(--ground);color:var(--ink);font-family:Archivo,"Helvetica Neue",Arial,sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0;background-color:var(--ground);background-image:radial-gradient(var(--dot) 1px,transparent 1px);touch-action:none;cursor:grab;overscroll-behavior:none}
+  #stage.dragging{cursor:grabbing}
+  #world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  #world img{max-width:none;display:block;width:100%;height:100%;object-fit:fill}
+  .item{position:absolute;overflow:hidden;background:var(--surface-2);transition:opacity .18s ease}
+  .item.crop img{position:absolute;width:auto;height:auto}
+  a.item{text-decoration:none;-webkit-tap-highlight-color:transparent}
+  a.item:focus-visible{outline:3px solid var(--brass);outline-offset:2px}
+
+  /* ---- chrome ---- */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+  #views{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:12px;z-index:5;display:flex;padding:3px;gap:3px}
+  #views button{font:inherit;font-size:11.5px;font-weight:500;letter-spacing:.03em;color:var(--muted);background:transparent;border:0;border-radius:7px;padding:5px 11px;cursor:pointer}
+  #views button[aria-pressed="true"]{background:var(--surface-2);color:var(--ink)}
+  #views button:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
+
+  #zoomer{position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:5;display:flex;align-items:center;padding:3px}
+  #zoomer button{font:inherit;font-size:14px;color:var(--ink);background:transparent;border:0;border-radius:7px;width:30px;height:28px;cursor:pointer;line-height:1}
+  #zoomer button:hover{background:var(--surface-2)}
+  #zoomer button:focus-visible{outline:2px solid var(--brass);outline-offset:-1px}
+  #zlevel{font-size:11.5px;font-weight:500;color:var(--muted);min-width:44px;text-align:center;font-variant-numeric:tabular-nums;cursor:pointer;background:transparent;border:0;padding:0;font-family:inherit}
+  #zlevel:hover{color:var(--brass)}
+
+  #tag{position:fixed;z-index:6;pointer-events:none;font-size:11px;font-weight:500;letter-spacing:.03em;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:3px 7px;box-shadow:var(--shadow);white-space:nowrap;transform:translate(10px,14px)}
+  #tag span{color:var(--brass)}
+
+  #callout{position:fixed;z-index:7;display:flex;align-items:center;gap:7px;max-width:min(400px,calc(100vw - 24px));
+    padding:7px 10px;background:var(--surface);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);
+    font-size:12px;font-weight:500;color:var(--ink);text-decoration:none;line-height:1.3}
+  #callout:hover,#callout:focus-visible{color:var(--brass);border-color:var(--brass)}
+  #callout:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+  #coText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  #callout i{font-style:normal;font-size:13px;color:var(--brass);flex:none}
+  #callout::after{content:"";position:absolute;left:var(--tail,50%);bottom:-5px;width:8px;height:8px;
+    background:var(--surface);border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+    transform:translateX(-50%) rotate(45deg)}
+  #callout.below::after{bottom:auto;top:-5px;border-right:0;border-bottom:0;
+    border-left:1px solid var(--line);border-top:1px solid var(--line)}
+
+  #bar{position:fixed;top:0;left:0;height:2px;width:0;background:var(--brass);z-index:9;transition:width .25s ease,opacity .4s ease .2s}
+
+  /* ---- grid view ---- */
+  #grid{position:fixed;inset:0;overflow-y:auto;overflow-x:hidden;z-index:2;background:var(--ground);padding:calc(66px + env(safe-area-inset-top,0px)) 16px calc(24px + env(safe-area-inset-bottom,0px));-webkit-overflow-scrolling:touch}
+  #gridInner{columns:5 190px;column-gap:12px;max-width:1500px;margin:0 auto}
+  #grid a,#grid div.gitem{display:block;break-inside:avoid;margin:0 0 12px;border-radius:6px;overflow:hidden;background:var(--surface-2);position:relative;text-decoration:none;transition:opacity .18s ease}
+  #grid img{display:block;width:100%;height:auto;object-fit:cover}
+  #grid a::after{content:attr(data-host);position:absolute;left:6px;bottom:6px;font-size:10px;font-weight:500;letter-spacing:.03em;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:2px 6px;opacity:0;transition:opacity .15s ease}
+  #grid a:hover::after,#grid a:focus-visible::after{opacity:1}
+  #grid a:focus-visible{outline:3px solid var(--brass);outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+</style>
+
+<div id="bar"></div>
+<div id="stage"><div id="world"></div></div>
+<div id="grid" hidden><div id="gridInner"></div></div>
+
+<div id="views" class="panel">
+  <button id="vBoard" aria-pressed="true">Board</button>
+  <button id="vGrid" aria-pressed="false">Grid</button>
+</div>
+
+<div id="zoomer" class="panel">
+  <button id="zOut" aria-label="Zoom out">&minus;</button>
+  <button id="zlevel" title="Fit board to screen">100%</button>
+  <button id="zIn" aria-label="Zoom in">+</button>
+  <button id="zFit" aria-label="Fit board to screen" title="Fit board to screen">&#9723;</button>
+</div>
+
+<div id="tag" hidden></div>
+<a id="callout" target="_blank" rel="noopener noreferrer" hidden><span id="coText"></span><i>&#8599;</i></a>
+
+<script>
+const DATA = __DATA__;
+const THUMBS = __THUMBS__;
+const stage=document.getElementById('stage'), world=document.getElementById('world');
+const tag=document.getElementById('tag'), bar=document.getElementById('bar');
+const zlevel=document.getElementById('zlevel');
+
+const host=u=>{try{return new URL(u).hostname.replace(/^www\./,'')}catch(e){return ''}};
+
+const recs=DATA.items.map((it,i)=>{
+  const h=it.l?host(it.l):'';
+  return {...it, host:h, thumb:THUMBS[i], up:false};
+});
+
+/* ---------- board ---------- */
+const frag=document.createDocumentFragment();
+let loaded=0;
+recs.forEach(r=>{
+  const el=document.createElement(r.l?'a':'div');
+  el.className='item'+(r.c?' crop':'');
+  el.style.cssText=`left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px`;
+  if(r.l){el.href=r.l;el.target='_blank';el.rel='noopener noreferrer';}
+  const img=document.createElement('img');
+  img.alt='';img.decoding='async';img.draggable=false;
+  if(r.c){
+    const [cx,cy,cw,ch,nw,nh]=r.c, k=r.w/cw;
+    img.style.cssText=`width:${nw*k}px;height:${nh*(r.h/ch)}px;left:${-cx*k}px;top:${-cy*(r.h/ch)}px`;
+  }
+  img.addEventListener('load',()=>{loaded++;bar.style.width=Math.min(100,loaded/recs.length*100)+'%';
+    if(loaded>=recs.length){bar.style.opacity='0';}},{once:true});
+  img.src=r.thumb;
+  el.appendChild(img);
+  r.node=el; r.img=img;
+  frag.appendChild(el);
+});
+world.appendChild(frag);
+
+let scale=1,tx=0,ty=0,fit=1;
+function apply(){
+  world.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
+  stage.style.backgroundSize=(Math.max(14,120*scale))+'px '+(Math.max(14,120*scale))+'px';
+  stage.style.backgroundPosition=tx+'px '+ty+'px';
+  zlevel.textContent=Math.round(scale/fit*100)+'%';
+  if(openMode==='board')place();
+  queueUpgrade();
+}
+function computeFit(){
+  const pad=56, vw=stage.clientWidth-pad*2, vh=stage.clientHeight-pad*2;
+  return Math.min(vw/DATA.W, vh/DATA.H);
+}
+function fitBoard(){
+  fit=computeFit(); scale=fit;
+  tx=(stage.clientWidth-DATA.W*scale)/2; ty=(stage.clientHeight-DATA.H*scale)/2;
+  apply();
+}
+function zoomAt(cx,cy,factor){
+  const ns=Math.min(fit*22,Math.max(fit*0.6,scale*factor));
+  const k=ns/scale;
+  tx=cx-(cx-tx)*k; ty=cy-(cy-ty)*k; scale=ns; apply();
+}
+
+let upT=0;
+function queueUpgrade(){clearTimeout(upT);upT=setTimeout(upgrade,140);}
+function upgrade(){
+  const vw=stage.clientWidth,vh=stage.clientHeight,m=240;
+  for(const r of recs){
+    if(r.up||r.w*scale<400)continue;
+    const sx=r.x*scale+tx, sy=r.y*scale+ty;
+    if(sx>vw+m||sy>vh+m||sx+r.w*scale< -m||sy+r.h*scale< -m)continue;
+    r.up=true; r.img.src='img/'+r.f+'.webp';
+  }
+}
+
+/* pointer pan + pinch */
+const pts=new Map(); let moved=0, last=null, pinch=null, downRec=null;
+function resetPan(){pts.clear();last=null;pinch=null;downRec=null;stage.classList.remove('dragging');}
+stage.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse'&&e.button!==0)return;   /* right/middle: leave the native menu alone */
+  downRec=recs.find(x=>x.node===e.target.closest('.item'))||null;
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  stage.setPointerCapture(e.pointerId);
+  if(pts.size===1){last={x:e.clientX,y:e.clientY};moved=0;stage.classList.add('dragging');}
+  if(pts.size===2){const[a,b]=[...pts.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y)};}
+});
+stage.addEventListener('pointermove',e=>{
+  if(!pts.has(e.pointerId)){ if(pts.size===0) hover(e); return; }
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pts.size===2&&pinch){
+    const[a,b]=[...pts.values()], d=Math.hypot(a.x-b.x,a.y-b.y);
+    const r=stage.getBoundingClientRect();
+    zoomAt((a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top,d/pinch.d);
+    pinch.d=d; moved=99; return;
+  }
+  if(last){
+    const dx=e.clientX-last.x, dy=e.clientY-last.y;
+    moved+=Math.abs(dx)+Math.abs(dy);
+    tx+=dx; ty+=dy; last={x:e.clientX,y:e.clientY}; apply();
+  }
+});
+function end(e){
+  const solo=pts.size===1;
+  pts.delete(e.pointerId);
+  if(pts.size<2)pinch=null;
+  if(pts.size===0){
+    const r=downRec;
+    last=null; downRec=null; stage.classList.remove('dragging');
+    if(e.type==='pointerup'&&solo&&r&&r.l&&moved<=8&&!(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)){
+      const over=document.elementFromPoint(e.clientX,e.clientY);
+      if(over&&over.closest('.item')===r.node)openCallout(r,'board',false);
+    }
+  }
+}
+stage.addEventListener('pointerup',end);
+stage.addEventListener('pointercancel',end);
+stage.addEventListener('contextmenu',resetPan);   /* menu swallows pointerup -> board would keep panning */
+addEventListener('blur',resetPan);
+world.addEventListener('dragstart',e=>e.preventDefault());
+
+/* link callout -- click a piece, its URL pops out above it */
+const callout=document.getElementById('callout'), coText=document.getElementById('coText');
+let openRec=null, openMode=null, cw=0, ch=0;
+const pretty=u=>{try{const x=new URL(u);return x.hostname.replace(/^www\./,'')+x.pathname.replace(/\/$/,'');}catch(e){return u}};
+function rectFor(){
+  if(openMode==='board')return {left:openRec.x*scale+tx,top:openRec.y*scale+ty,width:openRec.w*scale,height:openRec.h*scale};
+  return openRec.gnode.getBoundingClientRect();
+}
+function place(){
+  const rc=rectFor(), cx=rc.left+rc.width/2;
+  const left=Math.max(8,Math.min(cx-cw/2,innerWidth-cw-8));
+  let top=rc.top-ch-10, below=false;
+  if(top<8){top=rc.top+rc.height+10;below=true;}
+  callout.style.left=Math.round(left)+'px';
+  callout.style.top=Math.round(top)+'px';
+  callout.classList.toggle('below',below);
+  callout.style.setProperty('--tail',Math.round(Math.max(12,Math.min(cx-left,cw-12)))+'px');
+}
+function openCallout(r,mode,byKey){
+  openRec=r; openMode=mode;
+  callout.href=r.l; callout.title=r.l; coText.textContent=pretty(r.l);
+  callout.hidden=false; tag.hidden=true;
+  cw=callout.offsetWidth; ch=callout.offsetHeight;
+  place();
+  if(byKey)callout.focus({preventScroll:true});
+}
+function closeCallout(){openRec=null;openMode=null;callout.hidden=true;}
+function linkClick(e){
+  const it=e.target.closest('#grid a[href]');
+  if(!it)return;
+  if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;  /* let the browser open a new tab */
+  e.preventDefault();
+  const r=recs.find(x=>x.gnode===it);
+  if(r)openCallout(r,'grid',e.detail===0);
+}
+stage.addEventListener('click',e=>{
+  const it=e.target.closest?.('a.item'); if(!it)return;
+  if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;  /* let the browser open a new tab */
+  e.preventDefault();
+  if(e.detail===0){const r=recs.find(x=>x.node===it); if(r)openCallout(r,'board',true);}  /* keyboard */
+});
+
+stage.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=stage.getBoundingClientRect();
+  if(e.ctrlKey||e.metaKey){zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-e.deltaY*0.01));}
+  else{const u=e.deltaMode===1?16:1;tx-=e.deltaX*u;ty-=e.deltaY*u;apply();}
+},{passive:false});
+
+stage.addEventListener('dblclick',e=>{
+  const r=stage.getBoundingClientRect();
+  zoomAt(e.clientX-r.left,e.clientY-r.top,e.shiftKey?0.5:1.9);
+});
+
+/* hover tag */
+function hover(e){
+  const it=e.target.closest?.('a.item');
+  if(!it||last||openRec){tag.hidden=true;return;}
+  const r=recs.find(x=>x.node===it);
+  tag.innerHTML=r.host+' <span>&#8599;</span>';
+  tag.hidden=false; tag.style.left=e.clientX+'px'; tag.style.top=e.clientY+'px';
+}
+stage.addEventListener('pointerleave',()=>tag.hidden=true);
+stage.addEventListener('pointerdown',()=>{tag.hidden=true;closeCallout();});
+
+/* keys */
+addEventListener('keydown',e=>{
+  if(e.target.tagName==='BUTTON'&&(e.key===' '||e.key==='Enter'))return;
+  const c={x:stage.clientWidth/2,y:stage.clientHeight/2};
+  if(e.key==='Escape'){if(openRec){closeCallout();e.preventDefault();}return;}
+  if(e.key==='+'||e.key==='='){zoomAt(c.x,c.y,1.25);}
+  else if(e.key==='-'||e.key==='_'){zoomAt(c.x,c.y,0.8);}
+  else if(e.key==='0'){fitBoard();}
+  else if(e.key.startsWith('Arrow')){
+    const s=e.shiftKey?240:90;
+    if(e.key==='ArrowLeft')tx+=s; if(e.key==='ArrowRight')tx-=s;
+    if(e.key==='ArrowUp')ty+=s; if(e.key==='ArrowDown')ty-=s;
+    apply(); e.preventDefault();
+  } else return;
+});
+
+document.getElementById('zIn').onclick=()=>zoomAt(stage.clientWidth/2,stage.clientHeight/2,1.3);
+document.getElementById('zOut').onclick=()=>zoomAt(stage.clientWidth/2,stage.clientHeight/2,1/1.3);
+document.getElementById('zFit').onclick=fitBoard;
+zlevel.onclick=fitBoard;
+addEventListener('resize',()=>{const p=fit;fit=computeFit();if(Math.abs(scale-p)<1e-9)fitBoard();else apply();if(openMode==='grid')place();});
+
+/* ---------- grid view ---------- */
+const grid=document.getElementById('grid'), gridInner=document.getElementById('gridInner');
+let gridBuilt=false;
+function buildGrid(){
+  if(gridBuilt)return; gridBuilt=true;
+  const f=document.createDocumentFragment();
+  recs.forEach(r=>{
+    const el=document.createElement(r.l?'a':'div');
+    if(r.l){el.href=r.l;el.target='_blank';el.rel='noopener noreferrer';el.dataset.host=r.host;}
+    else el.className='gitem';
+    const i=document.createElement('img');
+    i.loading='lazy'; i.decoding='async'; i.alt=''; i.src=r.thumb;
+    i.style.aspectRatio=(r.c?r.w/r.h:r.w/r.h).toFixed(3);
+    el.appendChild(i); r.gnode=el; f.appendChild(el);
+  });
+  gridInner.appendChild(f);
+}
+grid.addEventListener('click',linkClick);
+grid.addEventListener('pointerdown',e=>{if(!e.target.closest('#grid a[href]'))closeCallout();});
+grid.addEventListener('scroll',()=>{if(openMode==='grid')place();},{passive:true});
+
+const vB=document.getElementById('vBoard'), vG=document.getElementById('vGrid');
+function setView(v){
+  const g=v==='grid';
+  if(g)buildGrid();
+  grid.hidden=!g; stage.hidden=g; tag.hidden=true; closeCallout();
+  vB.setAttribute('aria-pressed',String(!g)); vG.setAttribute('aria-pressed',String(g));
+  document.body.style.overflow='hidden';
+}
+vB.onclick=()=>setView('board'); vG.onclick=()=>setView('grid');
+
+fitBoard();
+</script>
